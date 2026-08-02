@@ -1,6 +1,6 @@
 {
-  "name": "Francachela - Aureate Intelligence",
-  "description": "Plataforma de gestión de reputación y reseñas con inteligencia artificial para Francachela",
+  "name": "Francachela - ReviewPulse AI",
+  "description": "Controla la reputación de tu marca con IA para Francachela",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
