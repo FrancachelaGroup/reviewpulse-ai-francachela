@@ -1,38 +1,30 @@
-export type ReviewPlatform = 'google' | 'trustpilot' | 'tripadvisor' | 'yelp';
+export type AITone = "Formal" | "Cercano" | "Profesional" | "Entusiasta";
 
-export type ReviewStatus = 'PENDIENTE' | 'RESPONDIDA';
-
-export type AIPersonality = 'Formal' | 'Cercano' | 'Profesional' | 'Entusiasta';
-
-export type NavTab = 'dashboard' | 'reviews' | 'protocol' | 'config';
+export type ReviewStatus = "PENDIENTE" | "RESPONDIDA";
 
 export interface Review {
   id: string;
   author: string;
-  authorAvatar?: string;
-  platform: ReviewPlatform;
-  status: ReviewStatus;
+  avatarUrl?: string;
   rating: number; // 1-5
-  timeAgo: string;
-  text: string;
-  aiDraftResponse?: string;
-  publishedResponse?: string;
   date: string;
+  relativeTime: string;
+  content: string;
+  status: ReviewStatus;
+  aiResponse?: string;
+  responseDate?: string;
+  toneUsed?: AITone;
+  isAutoReplied?: boolean;
 }
 
-export interface ActivityItem {
-  id: string;
-  type: 'review' | 'ai_draft' | 'milestone';
-  title: string;
-  subtitle: string;
-  timeAgo: string;
-  badges?: string[];
+export interface AppConfig {
+  aiTone: AITone;
+  googleClientId: string;
+  googleClientSecret: string;
+  isConnected: boolean;
+  autopilotEnabled: boolean;
+  protocolSignature: string;
+  businessName: string;
 }
 
-export interface BusinessConnection {
-  id: string;
-  name: string;
-  platform: ReviewPlatform;
-  status: 'connected' | 'disconnected';
-  iconUrl?: string;
-}
+export type TabType = "dashboard" | "reviews" | "assistant" | "config";
