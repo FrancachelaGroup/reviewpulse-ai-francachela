@@ -1,188 +1,134 @@
-import express from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from '@google/genai';
-import { createServer as createViteServer } from 'vite';
+import express from "express";
+import path from "path";
+import { createServer as createViteServer } from "vite";
+import { GoogleGenAI } from "@google/genai";
+import dotenv from "dotenv";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
 
-let aiClient: GoogleGenAI | null = null;
+const app = express();
+const PORT = 3000;
 
-function getAiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn('GEMINI_API_KEY environment variable is missing.');
+app.use(express.json());
+
+// Initialize Gemini SDK with telemetry header
+const getGeminiClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn("GEMINI_API_KEY environment variable is missing.");
+  }
+  return new GoogleGenAI({
+    apiKey: apiKey || "",
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+};
+
+// API Endpoint to generate AI review response
+app.post("/api/ai/generate-reply", async (req, res) => {
+  try {
+    const { reviewContent, author, platform, rating, voiceProtocol } = req.body;
+
+    if (!reviewContent) {
+      return res.status(400).json({ error: "Falta el contenido de la reseña." });
     }
-    aiClient = new GoogleGenAI({
-      apiKey: apiKey || '',
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
+
+    const ai = getGeminiClient();
+
+    const tone = voiceProtocol?.tone || "Elegante y Sofisticado";
+    const brandVoice = voiceProtocol?.brandVoiceDescription || "Respuesta cordial, impecable y atenta.";
+    const signature = voiceProtocol?.signature || "Atentamente, Francachela";
+    const forbidden = voiceProtocol?.forbiddenWords?.join(", ") || "ninguna";
+
+    const systemInstruction = `Eres el Asistente de IA oficial de reputación para 'Francachela' (ReviewPulse AI).
+Tu tarea es redactar una respuesta exquisita y profesional para una reseña de un cliente.
+Tono deseado: ${tone}.
+Directrices de marca: ${brandVoice}.
+Firma requerida al final: ${signature}.
+Palabras estrictamente prohibidas: ${forbidden}.
+Idioma: Español.
+Responde de manera concisa (entre 2 y 4 párrafos cortos o 50-120 palabras), cálida y elegante. Muestra sincera gratitud por los elogios o empatía constructiva con soluciones si la reseña es negativa.`;
+
+    const userPrompt = `Redacta la respuesta para la siguiente reseña:
+Cliente: ${author || "Cliente"}
+Plataforma: ${platform || "Google Review"}
+Calificación: ${rating || 5} de 5 estrellas
+Reseña: "${reviewContent}"`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: userPrompt,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
       },
     });
+
+    const replyText = response.text || "Gracias por sus comentarios. En Francachela valoramos profundamente su preferencia.";
+
+    return res.json({ reply: replyText });
+  } catch (error: any) {
+    console.error("Error generating AI reply:", error);
+    return res.status(500).json({ 
+      error: "No se pudo generar la respuesta con IA.", 
+      details: error?.message || String(error)
+    });
   }
-  return aiClient;
-}
+});
+
+// API Endpoint to analyze sentiment and suggest action
+app.post("/api/ai/analyze-review", async (req, res) => {
+  try {
+    const { reviewContent, rating } = req.body;
+    const ai = getGeminiClient();
+
+    const prompt = `Analiza la siguiente reseña recibida en el negocio 'Francachela':
+Calificación: ${rating} estrellas
+Texto: "${reviewContent}"
+
+Devuelve únicamente un objeto JSON válido con los campos:
+- "sentiment": "positivo", "neutro" o "negativo"
+- "keywords": un arreglo de 3 palabras clave relevantes
+- "suggestedAction": recomendación corta (máx 15 palabras)`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const jsonStr = response.text || "{}";
+    const parsed = JSON.parse(jsonStr);
+
+    return res.json(parsed);
+  } catch (error: any) {
+    console.error("Error analyzing review:", error);
+    return res.status(500).json({ error: "Error analizando la reseña" });
+  }
+});
 
 async function startServer() {
-  const app = express();
-  const PORT = 3000;
-
-  app.use(express.json());
-
-  // API Routes
-  app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-
-  // API Route to generate AI Response for a review
-  app.post('/api/generate-response', async (req, res) => {
-    try {
-      const { reviewText, rating, author, platform, protocol, customInstructions } = req.body;
-
-      if (!reviewText) {
-        return res.status(400).json({ error: 'reviewText is required' });
-      }
-
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        // Fallback response if GEMINI_API_KEY is not configured yet
-        const fallback = rating >= 4
-          ? `Estimado/a ${author || 'Cliente'}, agradecemos sinceramente su comentario en ${platform || 'Google Review'}. En Francachela nos esforzamos por ofrecer un servicio impecable y una experiencia memorable. ¡Nos encantará recibirle de nuevo muy pronto!`
-          : `Estimado/a ${author || 'Cliente'}, lamentamos que su experiencia no haya sido plenamente satisfactoria. En Francachela tomamos su retroalimentación con máxima seriedad. Le invitamos a contactarnos directamente para atender su caso personalmente.`;
-        return res.json({
-          responseText: fallback,
-          sentiment: rating >= 4 ? 'POSITIVE' : rating === 3 ? 'NEUTRAL' : 'NEGATIVE',
-          confidence: 90,
-          keyPoints: ['Generado con protocolo por defecto'],
-        });
-      }
-
-      const ai = getAiClient();
-      const systemInstruction = `Eres el asistente de IA oficial de 'Francachela' (ReviewPulse AI).
-Tu misión es generar respuestas pulidas, altamente profesionales y con elegancia según el Protocolo de Voz de la marca.
-Tono configurado: ${protocol?.tone || 'Nocturno & Elegante'}.
-Palabras clave de marca a incluir si es oportuno: ${(protocol?.brandKeywords || []).join(', ')}.
-Palabras prohibidas (NUNCA USAR): ${(protocol?.forbiddenWords || []).join(', ')}.
-Plantilla de saludo: ${protocol?.greetingTemplate || 'Estimado/a {Nombre},'}
-Plantilla de despedida: ${protocol?.signOffTemplate || 'Atentamente,\nEl Equipo de Francachela'}
-Instrucciones personalizadas del protocolo: ${protocol?.customRules || 'Responde con elegancia y máxima atención al detalle.'}
-
-Formato de respuesta deseado: Un objeto JSON que contenga:
-- responseText: la respuesta lista para publicar
-- sentiment: POSITIVE, NEUTRAL, o NEGATIVE
-- confidence: un número del 1 al 100
-- keyPoints: un array de 2-3 puntos clave identificados en la reseña.`;
-
-      const prompt = `Reseña de usuario:
-Autor: ${author || 'Anónimo'}
-Plataforma: ${platform || 'Google Review'}
-Calificación: ${rating || 5}/5 estrellas
-Texto de la reseña: "${reviewText}"
-Instrucciones adicionales para esta respuesta: ${customInstructions || 'Ninguna'}`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: prompt,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              responseText: { type: Type.STRING, description: 'La respuesta redactada para el cliente' },
-              sentiment: { type: Type.STRING, description: 'POSITIVE, NEUTRAL or NEGATIVE' },
-              confidence: { type: Type.NUMBER, description: 'Score from 0 to 100' },
-              keyPoints: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-                description: 'Puntos clave analizados',
-              },
-            },
-            required: ['responseText', 'sentiment', 'confidence'],
-          },
-        },
-      });
-
-      const jsonText = response.text || '{}';
-      const parsed = JSON.parse(jsonText);
-
-      return res.json({
-        responseText: parsed.responseText,
-        sentiment: parsed.sentiment || (rating >= 4 ? 'POSITIVE' : 'NEGATIVE'),
-        confidence: parsed.confidence || 95,
-        keyPoints: parsed.keyPoints || [],
-      });
-    } catch (error: any) {
-      console.error('Error generating AI review response:', error);
-      return res.status(500).json({
-        error: 'Failed to generate response',
-        details: error?.message || String(error),
-      });
-    }
-  });
-
-  // API Route to analyze sentiment & topics for a review
-  app.post('/api/analyze-review', async (req, res) => {
-    try {
-      const { content, rating } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
-
-      if (!apiKey) {
-        return res.json({
-          sentiment: rating >= 4 ? 'POSITIVE' : rating === 3 ? 'NEUTRAL' : 'NEGATIVE',
-          summary: content.slice(0, 100) + '...',
-          priority: rating <= 2 ? 'ALTA' : 'NORMAL',
-        });
-      }
-
-      const ai = getAiClient();
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: `Analiza esta reseña para el restaurante/marca Francachela:
-"${content}"
-Calificación: ${rating}/5`,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              sentiment: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              priority: { type: Type.STRING },
-            },
-            required: ['sentiment', 'summary', 'priority'],
-          },
-        },
-      });
-
-      const parsed = JSON.parse(response.text || '{}');
-      return res.json(parsed);
-    } catch (error: any) {
-      console.error('Error analyzing review:', error);
-      return res.status(500).json({ error: error?.message || 'Error analyzing review' });
-    }
-  });
-
-  // Vite Integration
-  if (process.env.NODE_ENV !== 'production') {
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
