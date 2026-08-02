@@ -1,151 +1,146 @@
-import express from "express";
-import path from "path";
-import { fileURLToPath } from "url";
-import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
-import dotenv from "dotenv";
+import express from 'express';
+import path from 'path';
+import { GoogleGenAI } from '@google/genai';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const app = express();
+const PORT = 3000;
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+app.use(express.json());
 
-  app.use(express.json());
-
-  // Helper lazy initialize Gemini AI client
-  const getAI = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return null;
-    }
-    return new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-  };
-
-  // Healthcheck endpoint
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", brand: "Francachela ReviewPulse AI", version: "v3.1" });
-  });
-
-  // AI Review Response Generation Endpoint
-  app.post("/api/ai/generate-reply", async (req, res) => {
-    try {
-      const {
-        reviewAuthor = "Cliente",
-        starRating = 5,
-        reviewText = "",
-        tone = "Cercano",
-        signature = "Atentamente, El equipo de Francachela",
-        businessName = "Francachela",
-      } = req.body;
-
-      const ai = getAI();
-
-      if (ai) {
-        const prompt = `
-Eres la Inteligencia Artificial encargada de gestionar las reseñas del restaurante y lugar de entretenimiento "${businessName}".
-Genera una respuesta elegante, empática y profesional para la siguiente reseña recibida en Google Business Profile:
-
-- Cliente: ${reviewAuthor}
-- Calificación: ${starRating} de 5 estrellas
-- Comentario de la reseña: "${reviewText}"
-- Tono deseado: ${tone} (Opciones posibles: Formal, Cercano, Profesional, Entusiasta)
-- Firma a incluir al final: "${signature}"
-
-Instrucciones:
-1. Responde de forma muy natural, coherente y adaptada exactamente al tono "${tone}".
-2. Si es una reseña positiva (4-5 estrellas), agradece el comentario e invita al cliente a regresar a ${businessName}.
-3. Si es una reseña crítica o negativa (1-3 estrellas), ofrece una disculpa sincera, demuestra preocupación por su experiencia y ofrece un canal directo para solucionar la situación.
-4. Incluye la firma al final.
-5. Mantén la respuesta con una longitud óptima (entre 2 y 4 oraciones).
-`;
-
-        const response = await ai.models.generateContent({
-          model: "gemini-3.6-flash",
-          contents: prompt,
-          config: {
-            temperature: 0.7,
-            systemInstruction: `Eres la voz oficial de la marca Francachela en respuestas a reseñas de clientes. Muestra siempre sofisticación y atención personalizada.`,
-          },
-        });
-
-        const replyText = response.text ? response.text.trim() : "";
-
-        if (replyText) {
-          return res.json({
-            success: true,
-            replyText,
-            toneUsed: tone,
-            model: "gemini-3.6-flash",
-          });
-        }
-      }
-
-      // Fallback generator if AI API key is not present or API returned empty
-      const fallbacks: Record<string, string[]> = {
-        Formal: [
-          `Estimado/a ${reviewAuthor}, le agradecemos sinceramente por compartir su opinión sobre su experiencia en ${businessName}. Nos alegra saber que su visita haya sido satisfactoria. Esperamos tener el honor de recibirle nuevamente muy pronto.\n\n${signature}`,
-          `Apreciable ${reviewAuthor}, tomamos nota atenta de sus comentarios sobre ${businessName}. Su retroalimentación es muy valiosa para mantener la excelencia en nuestro servicio.\n\n${signature}`,
-        ],
-        Cercano: [
-          `¡Hola, ${reviewAuthor}! Muchísimas gracias por visitarnos en ${businessName} y dejar tu reseña. Nos alegra mucho saber que disfrutaste la noche con nosotros. ¡Te esperamos pronto de vuelta!\n\n${signature}`,
-          `¡Muchas gracias por tus palabras, ${reviewAuthor}! Nos encanta saber que la pasaste genial en ${businessName}. ¡Un fuerte abrazo y nos vemos pronto!\n\n${signature}`,
-        ],
-        Profesional: [
-          `Estimado/a ${reviewAuthor}, agradecemos que se haya tomado el tiempo de evaluar su experiencia en ${businessName}. Mantenemos un compromiso firme con la calidad y la atención al cliente.\n\n${signature}`,
-        ],
-        Entusiasta: [
-          `¡Genial, ${reviewAuthor}! 🎉 Nos emociona muchísimo saber que viviste una experiencia fantástica en ${businessName}. ¡El ambiente y el equipo siempre estarán listos para recibirte con los brazos abiertos!\n\n${signature}`,
-        ],
-      };
-
-      const toneOptions = fallbacks[tone] || fallbacks["Cercano"];
-      const randomReply = toneOptions[Math.floor(Math.random() * toneOptions.length)];
-
-      return res.json({
-        success: true,
-        replyText: randomReply,
-        toneUsed: tone,
-        isFallback: true,
-      });
-    } catch (err: any) {
-      console.error("Error generating reply:", err);
-      return res.status(500).json({
-        success: false,
-        error: "Error al generar la respuesta con la IA.",
-        details: err.message,
-      });
-    }
-  });
-
-  // Vite middleware in development mode
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+// Initialize Gemini Client
+function getGeminiClient() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    throw new Error('GEMINI_API_KEY is not configured in environment.');
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
   });
 }
 
-startServer();
+// Health Check API
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// AI Review Response Endpoint
+app.post('/api/generate-response', async (req, res) => {
+  try {
+    const { reviewText, rating, authorName, tone = 'Formal', protocolSignature = '', businessName = 'Francachela' } = req.body;
+
+    const ai = getGeminiClient();
+
+    const prompt = `Eres el Gerente de Reputación y Relación con Clientes de "${businessName}".
+Tu objetivo es redactar una respuesta profesional, empática, elegante y muy atenta a una reseña publicada por un cliente en Google Business Profile.
+
+Datos de la Reseña:
+- Nombre del Cliente: ${authorName || 'Cliente'}
+- Calificación: ${rating} de 5 estrellas
+- Comentario de la Reseña: "${reviewText || 'Sin comentario de texto'}"
+
+Instrucciones de Tono y Estilo:
+- Tono seleccionado: ${tone} (Formal, Cercano, Profesional o Entusiasta).
+- Adapta el lenguaje rigurosamente al tono "${tone}".
+- Si la calificación es baja (1-3 estrellas), muestra mucha empatía, ofrece resolver el problema directamente y proporciona discreción.
+- Si la calificación es alta (4-5 estrellas), agradece efusivamente la preferencia, destaca detalles positivos y reitera la bienvenida para su próxima visita.
+- Mantén la respuesta breve y contundente (máximo 3 párrafos cortos).
+${protocolSignature ? `- Finaliza el mensaje añadiendo la siguiente firma oficial exactamente al final: "${protocolSignature}"` : ''}
+
+Escribe solo la respuesta final lista para publicar, sin introducciones adicionales ni comillas externas.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+      },
+    });
+
+    const reply = response.text?.trim() || '';
+    res.json({ success: true, reply });
+  } catch (error: any) {
+    console.error('Error generating AI review response:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error al generar la respuesta con la Inteligencia Artificial.',
+    });
+  }
+});
+
+// AI Assistant Chat Endpoint
+app.post('/api/assistant-chat', async (req, res) => {
+  try {
+    const { messages, tone = 'Formal', businessName = 'Francachela' } = req.body;
+
+    const ai = getGeminiClient();
+
+    const systemInstruction = `Eres "Francachela ReviewPulse AI Assistant", un consultor experto en reputación de marca, experiencia de cliente y marketing gastronómico para la marca "${businessName}".
+Ayudas al usuario (Roberto o el gerente del negocio) a redactar mensajes, analizar tendencias de opinión, manejar crisis de comunicación, optimizar su Google Business Profile y afinar la voz de la marca.
+Responde siempre en español, de forma muy distinguida, elegante, concisa y útil.`;
+
+    const chat = ai.chats.create({
+      model: 'gemini-3.6-flash',
+      config: {
+        systemInstruction,
+      },
+    });
+
+    let lastUserMessage = 'Hola';
+    if (Array.isArray(messages) && messages.length > 0) {
+      for (let i = 0; i < messages.length - 1; i++) {
+        const msg = messages[i];
+        if (msg.role === 'user') {
+          await chat.sendMessage({ message: msg.content || msg.text });
+        }
+      }
+      lastUserMessage = messages[messages.length - 1].content || messages[messages.length - 1].text;
+    }
+
+    const response = await chat.sendMessage({ message: lastUserMessage });
+
+    res.json({
+      success: true,
+      reply: response.text?.trim() || '',
+    });
+  } catch (error: any) {
+    console.error('Error in assistant chat:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error al comunicarse con el asistente de IA.',
+    });
+  }
+});
+
+async function startServer() {
+  // Vite Middleware for Development or Static Serving for Production
+  if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+});
