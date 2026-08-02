@@ -1,62 +1,76 @@
 import express from "express";
 import path from "path";
+import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
 
-// Initialize Gemini SDK with telemetry header
-const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn("GEMINI_API_KEY environment variable is missing.");
-  }
-  return new GoogleGenAI({
-    apiKey: apiKey || "",
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
-      },
+// Initialize Gemini Client
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || "",
+  httpOptions: {
+    headers: {
+      "User-Agent": "aistudio-build",
     },
-  });
-};
+  },
+});
 
-// API Endpoint to generate AI review response
-app.post("/api/ai/generate-reply", async (req, res) => {
+// API Routes
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// AI Response Generation for Reviews
+app.post("/api/ai/generate-response", async (req, res) => {
   try {
-    const { reviewContent, author, platform, rating, voiceProtocol } = req.body;
+    const {
+      customerName = "Cliente",
+      rating = 5,
+      reviewText = "",
+      platform = "Google Maps",
+      tone = "Elegante & Exclusivo",
+      protocolInstructions = "Agradece cálidamente, mantén una voz sofisticada y nocturna de Francachela Restaurante & Bar Nocturno, e invita al cliente a volver pronto.",
+    } = req.body;
 
-    if (!reviewContent) {
-      return res.status(400).json({ error: "Falta el contenido de la reseña." });
+    if (!process.env.GEMINI_API_KEY) {
+      // Fallback if API key not available
+      return res.json({
+        response: `Estimado/a ${customerName}, muchas gracias por compartir su experiencia en Francachela (${platform}). Valoramos profundamente sus ${rating} estrellas. Nuestro equipo continuará brindándole la mejor atmósfera y gastronomía nocturna. ¡Esperamos recibirle pronto de nuevo!`,
+        generatedByAi: false,
+      });
     }
 
-    const ai = getGeminiClient();
+    const systemInstruction = `
+Eres el Asistente Inteligente de Reputación y Protocolo de Voz de "Francachela" (Restaurante y Bar Nocturno de Alta Gama).
+Tu objetivo es redactar respuestas a reseñas de clientes de manera impecable, personalizada y profesional.
 
-    const tone = voiceProtocol?.tone || "Elegante y Sofisticado";
-    const brandVoice = voiceProtocol?.brandVoiceDescription || "Respuesta cordial, impecable y atenta.";
-    const signature = voiceProtocol?.signature || "Atentamente, Francachela";
-    const forbidden = voiceProtocol?.forbiddenWords?.join(", ") || "ninguna";
+Instrucciones del Protocolo de Voz actual de Francachela:
+- Tono asignado: ${tone}
+- Pautas específicas: ${protocolInstructions}
+- Reglas:
+  1. Si la calificación es de 4-5 estrellas: Agradece la visita, resalta el ambiente, los platillos o cocteles, y haz una cordial invitación a regresar.
+  2. Si la calificación es de 1-3 estrellas: Muestra empatía sincera sin excusas defensivas, ofrece atención personalizada enviando un correo o contacto privado para dar seguimiento directo.
+  3. Firma siempre de manera refinada (ej. "Atentamente, El equipo de Francachela").
+  4. La respuesta debe estar redactada en español fluido y elegante, ajustada para la plataforma ${platform}.
+`;
 
-    const systemInstruction = `Eres el Asistente de IA oficial de reputación para 'Francachela' (ReviewPulse AI).
-Tu tarea es redactar una respuesta exquisita y profesional para una reseña de un cliente.
-Tono deseado: ${tone}.
-Directrices de marca: ${brandVoice}.
-Firma requerida al final: ${signature}.
-Palabras estrictamente prohibidas: ${forbidden}.
-Idioma: Español.
-Responde de manera concisa (entre 2 y 4 párrafos cortos o 50-120 palabras), cálida y elegante. Muestra sincera gratitud por los elogios o empatía constructiva con soluciones si la reseña es negativa.`;
-
-    const userPrompt = `Redacta la respuesta para la siguiente reseña:
-Cliente: ${author || "Cliente"}
-Plataforma: ${platform || "Google Review"}
-Calificación: ${rating || 5} de 5 estrellas
-Reseña: "${reviewContent}"`;
+    const userPrompt = `
+Redacta la respuesta oficial para la siguiente reseña:
+Cliente: ${customerName}
+Calificación: ${rating}/5 estrellas
+Plataforma: ${platform}
+Comentario de la reseña: "${reviewText || "Visita muy agradable, excelente comida y ambiente."}"
+`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.6-flash",
@@ -67,53 +81,48 @@ Reseña: "${reviewContent}"`;
       },
     });
 
-    const replyText = response.text || "Gracias por sus comentarios. En Francachela valoramos profundamente su preferencia.";
-
-    return res.json({ reply: replyText });
+    res.json({
+      response: response.text?.trim() || "Gracias por su preferencia en Francachela.",
+      generatedByAi: true,
+    });
   } catch (error: any) {
-    console.error("Error generating AI reply:", error);
-    return res.status(500).json({ 
-      error: "No se pudo generar la respuesta con IA.", 
-      details: error?.message || String(error)
+    console.error("Error invoking Gemini API:", error);
+    res.status(500).json({
+      error: "Error al generar la respuesta de la reseña.",
+      details: error?.message || String(error),
     });
   }
 });
 
-// API Endpoint to analyze sentiment and suggest action
-app.post("/api/ai/analyze-review", async (req, res) => {
+// AI Voice Protocol Suggestion / Optimizer
+app.post("/api/ai/optimize-protocol", async (req, res) => {
   try {
-    const { reviewContent, rating } = req.body;
-    const ai = getGeminiClient();
+    const { currentTone, brandVoiceNotes } = req.body;
 
-    const prompt = `Analiza la siguiente reseña recibida en el negocio 'Francachela':
-Calificación: ${rating} estrellas
-Texto: "${reviewContent}"
-
-Devuelve únicamente un objeto JSON válido con los campos:
-- "sentiment": "positivo", "neutro" o "negativo"
-- "keywords": un arreglo de 3 palabras clave relevantes
-- "suggestedAction": recomendación corta (máx 15 palabras)`;
+    if (!process.env.GEMINI_API_KEY) {
+      return res.json({
+        optimizedProtocol: `Francachela mantiene un tono ${currentTone || "Elegante y Sofisticado"}, priorizando respuestas cálidas para clientes satisfechos y resoluciones privadas e inmediatas para cualquier inconveniente nocturno.`,
+      });
+    }
 
     const response = await ai.models.generateContent({
       model: "gemini-3.6-flash",
-      contents: prompt,
+      contents: `Optimiza y redacta un protocolo de voz y tono refinado para las respuestas de IA de Francachela. Tono actual: "${currentTone}". Notas adicionales: "${brandVoiceNotes || "Garantizar una experiencia memorable en gastronomía y coctelería nocturna."}"`,
       config: {
-        responseMimeType: "application/json",
+        systemInstruction: "Eres un consultor experto en branding de lujo y gestión de reputación para restaurantes de alta gama.",
       },
     });
 
-    const jsonStr = response.text || "{}";
-    const parsed = JSON.parse(jsonStr);
-
-    return res.json(parsed);
+    res.json({
+      optimizedProtocol: response.text?.trim(),
+    });
   } catch (error: any) {
-    console.error("Error analyzing review:", error);
-    return res.status(500).json({ error: "Error analizando la reseña" });
+    res.status(500).json({ error: error.message });
   }
 });
 
+// Vite Middleware Integration
 async function startServer() {
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -123,13 +132,13 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Francachela AI Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

@@ -1,6 +1,6 @@
 {
-  "name": "Francachela - ReviewPulse AI",
-  "description": "Plataforma de gestión de reseñas y reputación de marca impulsada por IA con diseño de lujo en tonos oro y negro.",
+  "name": "Francachela AI - ReviewPulse",
+  "description": "Plataforma de gestión de reputación e inteligencia de reseñas para Francachela con IA de Gemini.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
