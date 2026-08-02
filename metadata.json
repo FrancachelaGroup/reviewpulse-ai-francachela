@@ -1,0 +1,6 @@
+{
+  "name": "ReviewPulse AI - Francachela",
+  "description": "Plataforma de gestión de reseñas con Inteligencia Artificial para el control de reputación de marca, respuestas automáticas y análisis de satisfacción.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
