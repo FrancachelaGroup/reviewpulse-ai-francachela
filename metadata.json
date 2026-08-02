@@ -1,6 +1,6 @@
 {
-  "name": "ReviewPulse AI",
-  "description": "Gestión de reputación y automatización de reseñas con IA para Google Business Profile",
+  "name": "Francachela - ReviewPulse AI",
+  "description": "Plataforma de gestión de reputación de marca y automatización de respuestas con IA para Francachela.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
