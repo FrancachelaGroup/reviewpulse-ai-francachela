@@ -388,6 +388,21 @@ function ConfigView({ config, onUpdate }: { config: ConfigSettings; onUpdate: (c
     'Empático': 'Comprensión profunda y validación emocional.',
   };
 
+  // Precargar credenciales desde variables de entorno del servidor
+  useEffect(() => {
+    if (!config.googleClientId) {
+      fetch('/api/config')
+        .then(r => r.json())
+        .then(data => {
+          if (data.googleClientId) {
+            onUpdate({ ...config, ...data });
+          }
+        })
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
