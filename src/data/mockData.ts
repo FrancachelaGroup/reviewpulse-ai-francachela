@@ -1,10 +1,14 @@
 import { Review, ConfigSettings, ActivityLog } from '../types';
 
 export const INITIAL_CONFIG: ConfigSettings = {
-  isConnected: true,
+  isConnected: false,
   aiTone: 'Formal',
   autopilotEnabled: false,
   protocolSignature: 'Atentamente,\nEl Equipo de Dirección — Francachela',
+  googleClientId: '',
+  googleClientSecret: '',
+  googleAccountId: '',
+  googleLocationId: '',
 };
 
 export const INITIAL_REVIEWS: Review[] = [

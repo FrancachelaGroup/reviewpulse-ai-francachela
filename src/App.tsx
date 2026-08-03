@@ -295,7 +295,7 @@ function AssistantView({ reviews }: { reviews: Review[] }) {
     setInput('');
     setLoading(true);
     try {
-      const res = await fetch('/api/assistant-chat', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, history: messages }),
@@ -395,18 +395,116 @@ function ConfigView({ config, onUpdate }: { config: ConfigSettings; onUpdate: (c
         <p className="text-slate-500 text-sm mt-1">Personaliza la personalidad de tu IA</p>
       </div>
 
-      {/* Conexión */}
+      {/* Conexión Google Business */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-        <h2 className="font-semibold text-slate-800 flex items-center gap-2"><TrendingUp size={16}/> Estado de conexión</h2>
-        <div className={`flex items-center gap-3 p-4 rounded-xl ${config.isConnected ? 'bg-emerald-50 border border-emerald-100' : 'bg-red-50 border border-red-100'}`}>
-          <div className={`w-2.5 h-2.5 rounded-full ${config.isConnected ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`}/>
-          <span className={`text-sm font-semibold ${config.isConnected ? 'text-emerald-700' : 'text-red-700'}`}>
-            {config.isConnected ? 'Conectado a Google Business' : 'Sin conexión'}
-          </span>
-          <button className="ml-auto text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors">
-            <LogOut size={12}/> Desconectar
-          </button>
-        </div>
+        <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+          <TrendingUp size={16}/> Conexión Google Business API
+        </h2>
+
+        {config.isConnected ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"/>
+              <span className="text-sm font-semibold text-emerald-700 flex-1">Conectado a Google Business</span>
+              <button onClick={async () => {
+                  await fetch('/api/auth/disconnect', { method: 'POST' });
+                  onUpdate({ ...config, isConnected: false, googleClientId: '', googleClientSecret: '', googleAccountId: '', googleLocationId: '' });
+                }}
+                className="text-xs text-slate-500 hover:text-red-600 flex items-center gap-1 transition-colors">
+                <LogOut size={12}/> Desconectar
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs text-slate-500">
+              <div className="bg-slate-50 rounded-xl p-3">
+                <div className="font-semibold text-slate-700 mb-1">Account ID</div>
+                <div className="font-mono text-slate-500 truncate">{config.googleAccountId || '—'}</div>
+              </div>
+              <div className="bg-slate-50 rounded-xl p-3">
+                <div className="font-semibold text-slate-700 mb-1">Location ID</div>
+                <div className="font-mono text-slate-500 truncate">{config.googleLocationId || '—'}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5">
+              <AlertCircle size={13}/> Ingresa tus credenciales de Google Business Profile API para sincronizar reseñas reales.
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1.5">Client ID</label>
+                <input
+                  type="text"
+                  value={config.googleClientId}
+                  onChange={e => onUpdate({ ...config, googleClientId: e.target.value })}
+                  placeholder="xxxxxxxx.apps.googleusercontent.com"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-slate-400 font-mono transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1.5">Client Secret</label>
+                <input
+                  type="password"
+                  value={config.googleClientSecret}
+                  onChange={e => onUpdate({ ...config, googleClientSecret: e.target.value })}
+                  placeholder="GOCSPX-••••••••••••••••••"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-slate-400 font-mono transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1.5">Account ID <span className="text-slate-400 font-normal">(Google Business Profile)</span></label>
+                <input
+                  type="text"
+                  value={config.googleAccountId}
+                  onChange={e => onUpdate({ ...config, googleAccountId: e.target.value })}
+                  placeholder="accounts/1234567890"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-slate-400 font-mono transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1.5">Location ID <span className="text-slate-400 font-normal">(tu sede o local)</span></label>
+                <input
+                  type="text"
+                  value={config.googleLocationId}
+                  onChange={e => onUpdate({ ...config, googleLocationId: e.target.value })}
+                  placeholder="locations/1234567890"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-slate-400 font-mono transition-colors"
+                />
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                if (!config.googleClientId || !config.googleClientSecret || !config.googleAccountId || !config.googleLocationId) {
+                  alert('Por favor completa todos los campos antes de conectar.');
+                  return;
+                }
+                try {
+                  const res = await fetch('/api/auth/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      clientId: config.googleClientId,
+                      clientSecret: config.googleClientSecret,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (data.url) {
+                    // Guardamos Account y Location en localStorage para usarlos después del callback
+                    localStorage.setItem('gAccountId', config.googleAccountId);
+                    localStorage.setItem('gLocationId', config.googleLocationId);
+                    window.location.href = data.url;
+                  } else {
+                    alert('Error generando la URL de autorización.');
+                  }
+                } catch {
+                  alert('Error conectando con Google. Verifica tus credenciales.');
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors">
+              <RefreshCw size={14}/> Autorizar con Google Business
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tono de IA */}

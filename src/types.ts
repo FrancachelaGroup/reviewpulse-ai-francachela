@@ -26,6 +26,10 @@ export interface ConfigSettings {
   aiTone: ToneType;
   autopilotEnabled: boolean;
   protocolSignature: string;
+  googleClientId: string;
+  googleClientSecret: string;
+  googleAccountId: string;
+  googleLocationId: string;
 }
 
 export interface ChatMessage {
