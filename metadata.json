@@ -1,6 +1,6 @@
 {
   "name": "ReviewPulse AI",
-  "description": "Ecosistema de gestión de reputación e inteligencia artificial para reseñas y respuestas autónomas.",
+  "description": "Plataforma de gestión de reputación y automatización de reseñas impulsada por IA.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
