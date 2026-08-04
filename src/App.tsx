@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, ReactNode } from 'react';
 import {
   LayoutDashboard, Star, MessageSquare, Settings,
   RefreshCw, Send, Copy, Check, ChevronRight,
@@ -58,7 +58,7 @@ function Dashboard({ reviews, logs, onNav }: { reviews: Review[]; logs: Activity
     { label: 'Reseñas críticas',   value: critical,          icon: <AlertCircle size={20}/>, color: 'text-red-500',     bg: 'bg-red-50' },
   ];
 
-  const logIcons: Record<string, JSX.Element> = {
+  const logIcons: Record<string, ReactNode> = {
     sync:          <RefreshCw size={14} className="text-blue-500"/>,
     ai_reply:      <Bot size={14} className="text-purple-500"/>,
     autopilot:     <Zap size={14} className="text-amber-500"/>,
@@ -140,6 +140,7 @@ function Dashboard({ reviews, logs, onNav }: { reviews: Review[]; logs: Activity
 
 // ── Panel de reseña individual ────────────────────────────
 function ReviewPanel({ review, config, onUpdate }: {
+  key?: string;
   review: Review;
   config: ConfigSettings;
   onUpdate: (r: Review) => void;
